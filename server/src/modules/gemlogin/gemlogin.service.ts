@@ -52,7 +52,8 @@ async function request<T>(method: string, path: string, body?: unknown, timeoutM
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type { BrowserVersion, Group, Profile, CreateProfilePayload, StartProfileResult } from '../../types';
+import type { BrowserVersion, Group, Profile, CreateProfilePayload, StartProfileResult } from '../../types';
+export type { BrowserVersion, Group, Profile, CreateProfilePayload, StartProfileResult };
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 
