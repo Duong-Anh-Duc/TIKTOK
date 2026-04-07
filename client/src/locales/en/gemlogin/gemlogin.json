@@ -1,0 +1,16 @@
+{
+  "title": "GemLogin Anti-detect Browser",
+  "running": "Running",
+  "notStarted": "Not started",
+  "start": "Start",
+  "close": "Close",
+  "cdpInjected": "CDP injected — Scraper uses GemLogin",
+  "cdpNotInjected": "CDP not injected",
+  "starting": "GemLogin is starting browser... may take <b>30–90 seconds</b>, please wait.",
+  "startDescription": "Click <b>Start</b> to open GemLogin profile (pre-logged in). Then scrape data directly — no cookie configuration needed.",
+  "startTooltip": "Open GemLogin profile ID=1. CDP URL will auto-inject into scraper.",
+  "closeConfirm": "Close GemLogin profile?",
+  "closeDescription": "Browser will close. Scraper will no longer use GemLogin.",
+  "started": "GemLogin started — ready to scrape data",
+  "closed": "GemLogin profile closed"
+}

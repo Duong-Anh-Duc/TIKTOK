@@ -1,0 +1,16 @@
+{
+  "title": "GemLogin Anti-detect Browser",
+  "running": "Đang chạy",
+  "notStarted": "Chưa khởi động",
+  "start": "Khởi động",
+  "close": "Đóng",
+  "cdpInjected": "CDP đã inject — Scraper dùng GemLogin",
+  "cdpNotInjected": "CDP chưa inject",
+  "starting": "GemLogin đang khởi động browser... có thể mất <b>30–90 giây</b>, vui lòng chờ.",
+  "startDescription": "Bấm <b>Khởi động</b> để mở profile GemLogin (đã đăng nhập sẵn). Sau đó cào dữ liệu trực tiếp — không cần cấu hình cookie.",
+  "startTooltip": "Mở profile GemLogin ID=1. CDP URL sẽ tự inject vào scraper.",
+  "closeConfirm": "Đóng GemLogin profile?",
+  "closeDescription": "Browser sẽ đóng. Scraper sẽ không còn dùng GemLogin nữa.",
+  "started": "GemLogin đã khởi động — sẵn sàng cào dữ liệu",
+  "closed": "Đã đóng GemLogin profile"
+}

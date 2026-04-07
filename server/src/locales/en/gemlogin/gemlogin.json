@@ -1,0 +1,13 @@
+{
+  "startSuccess": "GemLogin profile started",
+  "closeSuccess": "GemLogin profile closed",
+  "alreadyRunning": "GemLogin is running profile \"{{profileId}}\". Close it before starting a new one",
+  "noActiveProfile": "No active profile is running",
+  "cdpNotFound": "CDP port not found. If running Docker, make sure cdp-relay.js is running on host",
+  "noProfileReconnect": "No active profile to reconnect",
+  "startingBrowser": "GemLogin is starting browser...",
+  "profileReady": "Profile {{profileId}} ready. CDP: {{cdpUrl}}",
+  "cdpNotFoundDocker": "CDP port not found. If running Docker, make sure cdp-relay.js is running on host",
+  "cdpNotFoundScan": "CDP port not found after full scan. Make sure GemLogin has opened a browser with remote debugging",
+  "noProfileRunning": "No profile is currently running"
+}

@@ -1,0 +1,19 @@
+{
+  "appName": "TikTok Shop Manager",
+  "save": "Save",
+  "cancel": "Cancel",
+  "delete": "Delete",
+  "edit": "Edit",
+  "create": "Create",
+  "search": "Search",
+  "loading": "Loading...",
+  "noData": "No data",
+  "confirm": "Confirm",
+  "back": "Back",
+  "actions": "Actions",
+  "status": "Status",
+  "success": "Success",
+  "error": "Error",
+  "warning": "Warning",
+  "close": "Close"
+}

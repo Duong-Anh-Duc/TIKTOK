@@ -1,0 +1,9 @@
+{
+  "puzzleImageNotFound": "Puzzle image not found",
+  "sliderHandleNotFound": "Slider handle not found",
+  "imageNotFound": "Captcha image not found",
+  "imageFetchFailed": "Failed to fetch image",
+  "ommoPointsNotReturned": "OMMO did not return pointA/pointB",
+  "ommoInvalidResult": "OMMO returned invalid result",
+  "invalidDragDistance": "Invalid drag distance"
+}

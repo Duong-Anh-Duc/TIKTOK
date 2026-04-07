@@ -1,0 +1,4 @@
+{
+  "failed": "Validation failed",
+  "requiredField": "Field {{field}} is required"
+}

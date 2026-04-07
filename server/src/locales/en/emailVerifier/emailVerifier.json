@@ -1,0 +1,4 @@
+{
+  "mailtmNotConfigured": "MAILTM_ADDRESS or MAILTM_PASSWORD not configured in .env",
+  "verificationTimeout": "Verification code timeout"
+}

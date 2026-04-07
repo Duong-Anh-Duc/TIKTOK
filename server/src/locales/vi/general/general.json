@@ -1,0 +1,5 @@
+{
+  "serverError": "Lỗi server nội bộ",
+  "notFound": "{{method}} {{url}} không tồn tại",
+  "rateLimited": "Quá nhiều yêu cầu, vui lòng thử lại sau"
+}

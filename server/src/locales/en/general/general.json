@@ -1,0 +1,5 @@
+{
+  "serverError": "Internal server error",
+  "notFound": "{{method}} {{url}} not found",
+  "rateLimited": "Too many requests, please try again later"
+}

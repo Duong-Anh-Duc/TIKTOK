@@ -1,0 +1,18 @@
+export const COLORS = {
+  primary: '#FE2C55',
+  primaryHover: '#E5284D',
+  primaryActive: '#CC2344',
+  secondary: '#25F4EE',
+  dark: '#161823',
+  darkGray: '#1F1F2E',
+  darkBg: '#0A0A14',
+  cardLight: '#F7F8FA',
+  sidebarLight: '#F2F3F7',
+  bgLight: '#ECEEF2',
+  headerDark: '#1a1a2e',
+  white: '#FFFFFF',
+  success: '#22C55E',
+  warning: '#F59E0B',
+  purple: '#9B59B6',
+  green: '#2ECC71',
+} as const;

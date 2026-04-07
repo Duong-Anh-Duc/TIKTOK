@@ -1,0 +1,131 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  STAFF
+  VIEWER
+}
+
+model User {
+  id            String     @id @default(uuid())
+  email         String     @unique
+  password_hash String
+  full_name     String
+  avatar_url    String?
+  role          UserRole   @default(STAFF)
+  is_active     Boolean    @default(true)
+  created_at    DateTime   @default(now())
+  updated_at    DateTime   @updatedAt
+  audit_logs    AuditLog[]
+
+  @@map("users")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  user_id    String
+  action     String
+  entity     String
+  entity_id  String
+  old_value  Json?
+  new_value  Json?
+  created_at DateTime @default(now())
+  user       User     @relation(fields: [user_id], references: [id])
+
+  @@index([entity, entity_id])
+  @@index([user_id])
+  @@index([created_at])
+  @@map("audit_logs")
+}
+
+model Creator {
+  id               String   @id @default(uuid())
+  creator_id       String   @unique // TikTok creator ID (cid param)
+  username         String
+  display_name     String?
+  avatar_url       String?
+  bio              String?
+  score            String?
+  categories       String[] // Danh mục
+  followers        String?  // "2,8K"
+  followers_count  Int?     // 2800
+
+  // Doanh số
+  gmv              String?  // "83,4Tr đ"
+  items_sold       Int?     // 741
+  avg_views        String?  // "194"
+  engagement_rate  String?  // "1,9%"
+  gpm              String?  // "213,8K đ"
+  gmv_per_customer String?  // "122K đ"
+
+  // Thông tin liên hệ (từ trang detail)
+  phone            String?
+  email            String?
+  tiktok_url       String?
+
+  // Metadata
+  shop_id          String?  // shop_id từ URL
+  scraped_at       DateTime @default(now())
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  @@index([username])
+  @@index([shop_id])
+  @@index([scraped_at])
+  @@map("creators")
+}
+
+model ScrapeJob {
+  id          String   @id @default(uuid())
+  status      String   @default("pending") // pending, running, completed, failed
+  total       Int      @default(0)
+  scraped     Int      @default(0)
+  failed      Int      @default(0)
+  shop_id     String?
+  message     String?
+  error       String?
+  started_at  DateTime?
+  finished_at DateTime?
+  created_at  DateTime @default(now())
+
+  @@index([status])
+  @@map("scrape_jobs")
+}
+
+model ScrapeSchedule {
+  id              String    @id @default(uuid())
+  name            String
+  cron_expr       String
+  is_enabled      Boolean   @default(true)
+
+  // Filter settings
+  max_creators    Int       @default(0)
+  categories      Json      @default("[]")
+  content_type    String    @default("")
+  gmv             Json      @default("[]")
+  items_sold      Json      @default("[]")
+  live_viewer_min Int       @default(0)
+
+  // Tracking
+  last_run_at     DateTime?
+  last_job_id     String?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  @@map("scrape_schedules")
+}
+
+model SystemConfig {
+  id    String @id @default(uuid())
+  key   String @unique
+  value String
+
+  @@map("system_configs")
+}

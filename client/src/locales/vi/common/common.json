@@ -1,0 +1,19 @@
+{
+  "appName": "TikTok Shop Manager",
+  "save": "Lưu",
+  "cancel": "Hủy",
+  "delete": "Xóa",
+  "edit": "Sửa",
+  "create": "Tạo mới",
+  "search": "Tìm kiếm",
+  "loading": "Đang tải...",
+  "noData": "Không có dữ liệu",
+  "confirm": "Xác nhận",
+  "back": "Quay lại",
+  "actions": "Thao tác",
+  "status": "Trạng thái",
+  "success": "Thành công",
+  "error": "Lỗi",
+  "warning": "Cảnh báo",
+  "close": "Đóng"
+}

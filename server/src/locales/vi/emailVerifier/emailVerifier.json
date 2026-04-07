@@ -1,0 +1,4 @@
+{
+  "mailtmNotConfigured": "MAILTM_ADDRESS hoặc MAILTM_PASSWORD chưa cấu hình trong .env",
+  "verificationTimeout": "Hết thời gian chờ mã xác minh"
+}

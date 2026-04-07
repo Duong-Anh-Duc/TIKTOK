@@ -1,0 +1,21 @@
+{
+  "started": "Đã bắt đầu cào dữ liệu",
+  "shopIdRequired": "Shop ID là bắt buộc",
+  "cdpRequired": "Cần khởi động GemLogin trước khi cào. CDP chưa sẵn sàng",
+  "creatorsRetrieved": "Lấy danh sách nhà sáng tạo thành công",
+  "creatorsDeleted": "Đã xóa tất cả nhà sáng tạo",
+  "jobNotFound": "Không tìm thấy job",
+  "scrapingPage": "Đang cào trang {{page}}...",
+  "scrapingDetail": "Đang lấy chi tiết: {{name}}",
+  "completed": "Cào hoàn tất: {{total}} nhà sáng tạo",
+  "filterApplied": "Đã áp dụng bộ lọc trên TikTok",
+  "invalidFile": "File không hợp lệ",
+  "fileNotFound": "Không tìm thấy file",
+  "fileDeleted": "Đã xóa file",
+  "loginRequiredButFailed": "Cần đăng nhập TikTok nhưng auto-login thất bại",
+  "fileRenamed": "Đã đổi tên file",
+  "newNameRequired": "Tên file mới là bắt buộc",
+  "testLoginSuccess": "Đăng nhập TikTok Shop thành công!",
+  "testLoginFailed": "Đăng nhập thất bại. Kiểm tra email/mật khẩu hoặc captcha.",
+  "alreadyLoggedIn": "Đã đăng nhập sẵn, không cần login lại."
+}

@@ -1,0 +1,7 @@
+{
+  "nameRequired": "Name and cron expression are required",
+  "cronInvalid": "Invalid cron expression",
+  "notFound": "Schedule not found",
+  "alreadyRunning": "A scheduled scrape is already running",
+  "runStarted": "Schedule started running"
+}

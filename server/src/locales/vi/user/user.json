@@ -1,0 +1,8 @@
+{
+  "listRetrieved": "Lấy danh sách người dùng thành công",
+  "created": "Tạo người dùng thành công",
+  "updated": "Cập nhật người dùng thành công",
+  "deleted": "Xóa người dùng thành công",
+  "emailExists": "Email đã tồn tại",
+  "notFound": "Không tìm thấy người dùng"
+}

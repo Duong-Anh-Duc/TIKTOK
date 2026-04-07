@@ -1,0 +1,87 @@
+/* ======= SCRAPER PAGE ======= */
+.scraper-tiktok-icon-wrap {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255,255,255,0.15);
+  backdrop-filter: blur(8px);
+}
+
+.scraper-tiktok-icon {
+  font-size: 24px;
+  color: #fff;
+}
+
+.scraper-filter-card {
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+}
+
+.scraper-file-card {
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+  margin-top: 20px;
+}
+
+.scraper-overlay-title {
+  color: #fff;
+  margin: 28px 0 8px;
+  letter-spacing: -0.3px;
+  font-size: 22px;
+}
+
+.scraper-overlay-text {
+  color: rgba(255,255,255,0.45);
+  font-size: 13px;
+}
+
+.scraper-progress-label {
+  color: rgba(255,255,255,0.4);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.scraper-progress-percent {
+  color: #FE2C55;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Live viewer dropdown */
+.live-viewer-dropdown {
+  background: var(--bg-card);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+  padding: 20px;
+  min-width: 280px;
+  border: 1px solid var(--border-color);
+}
+
+.live-viewer-btn {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.live-viewer-btn--active {
+  border-color: #FE2C55;
+}
+
+.live-viewer-badge {
+  font-size: 10px;
+  background: rgba(254,44,85,0.1);
+  color: #FE2C55;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-weight: 600;
+}

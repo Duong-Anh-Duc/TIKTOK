@@ -1,0 +1,7 @@
+{
+  "nameRequired": "Tên và cron expression là bắt buộc",
+  "cronInvalid": "Cron expression không hợp lệ",
+  "notFound": "Không tìm thấy lịch cào",
+  "alreadyRunning": "Đang có lịch cào đang chạy",
+  "runStarted": "Đã bắt đầu chạy"
+}

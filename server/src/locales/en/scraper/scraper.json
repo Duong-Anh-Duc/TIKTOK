@@ -1,0 +1,21 @@
+{
+  "started": "Scraping started",
+  "shopIdRequired": "Shop ID is required",
+  "cdpRequired": "GemLogin must be started before scraping. CDP not ready",
+  "creatorsRetrieved": "Creators retrieved successfully",
+  "creatorsDeleted": "All creators deleted",
+  "jobNotFound": "Job not found",
+  "scrapingPage": "Scraping page {{page}}...",
+  "scrapingDetail": "Getting details: {{name}}",
+  "completed": "Scraping completed: {{total}} creators",
+  "filterApplied": "Filter applied on TikTok",
+  "invalidFile": "Invalid file",
+  "fileNotFound": "File not found",
+  "fileDeleted": "File deleted",
+  "loginRequiredButFailed": "TikTok login required but auto-login failed",
+  "fileRenamed": "File renamed",
+  "newNameRequired": "New file name is required",
+  "testLoginSuccess": "TikTok Shop login successful!",
+  "testLoginFailed": "Login failed. Check email/password or captcha.",
+  "alreadyLoggedIn": "Already logged in, no login needed."
+}

@@ -1,0 +1,8 @@
+{
+  "listRetrieved": "Users retrieved successfully",
+  "created": "User created successfully",
+  "updated": "User updated successfully",
+  "deleted": "User deleted successfully",
+  "emailExists": "Email already exists",
+  "notFound": "User not found"
+}

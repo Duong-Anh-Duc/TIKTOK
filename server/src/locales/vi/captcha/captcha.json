@@ -1,0 +1,9 @@
+{
+  "puzzleImageNotFound": "Không tìm được puzzle image",
+  "sliderHandleNotFound": "Không tìm được slider handle",
+  "imageNotFound": "Không tìm được captcha image",
+  "imageFetchFailed": "Fetch ảnh thất bại",
+  "ommoPointsNotReturned": "OMMO không trả được pointA/pointB",
+  "ommoInvalidResult": "OMMO trả kết quả không hợp lệ",
+  "invalidDragDistance": "Khoảng cách drag không hợp lệ"
+}

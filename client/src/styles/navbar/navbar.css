@@ -1,0 +1,66 @@
+/* ======= NAVBAR ======= */
+.navbar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-color);
+  height: 64px;
+  position: sticky;
+  top: 0;
+  z-index: 99;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+  padding: 0 24px;
+}
+
+.navbar-header--mobile {
+  padding: 0 12px;
+}
+
+.navbar-toggle-btn {
+  font-size: 16px;
+  border-radius: 8px;
+  width: 36px;
+  height: 36px;
+}
+
+.navbar-lang-btn {
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  height: 34px;
+  padding: 0 12px;
+  background: rgba(254,44,85,0.04);
+  border: 1px solid rgba(254,44,85,0.08);
+}
+
+.navbar-user-name {
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.navbar-avatar {
+  background-color: #FE2C55;
+}
+
+.navbar-modal-btn-primary {
+  background: #FE2C55;
+  border-color: #FE2C55;
+}
+
+.navbar-profile-avatar {
+  background-color: #FE2C55;
+}
+
+.navbar-profile-email {
+  margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.navbar-profile-center {
+  text-align: center;
+  margin-bottom: 20px;
+  margin-top: 16px;
+}
