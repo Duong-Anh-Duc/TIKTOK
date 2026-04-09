@@ -208,7 +208,14 @@ body {
   gap: 0;
   position: relative;
   z-index: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  flex-wrap: nowrap;
+  min-width: 0;
 }
+.steps-flow::-webkit-scrollbar { display: none; }
 
 /* Each step item */
 .step-flow-item {
@@ -219,6 +226,8 @@ body {
   border-radius: 10px;
   animation: step-breathe 9s ease-in-out infinite;
   opacity: 0.4;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 @keyframes step-breathe {
@@ -798,7 +807,7 @@ html[data-theme='dark'] .file-size-tag {
   border-radius: 28px;
   padding: 48px 52px;
   text-align: center;
-  max-width: 440px;
+  max-width: 560px;
   width: 100%;
   border: 1px solid rgba(254,44,85,0.1);
   box-shadow: 0 40px 100px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.03);
@@ -900,6 +909,27 @@ html[data-theme='dark'] .file-size-tag {
   letter-spacing: 1px;
   margin-top: 6px;
   color: rgba(255,255,255,0.3);
+}
+
+/* Timer */
+.overlay-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 20px;
+  padding: 4px 14px;
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255,255,255,0.7);
+  letter-spacing: 1.5px;
+  margin-bottom: 8px;
+}
+
+.overlay-timer-icon {
+  font-size: 13px;
 }
 
 /* Aurora sweep */

@@ -9,5 +9,6 @@
   "profileReady": "Profile {{profileId}} sẵn sàng. CDP: {{cdpUrl}}",
   "cdpNotFoundDocker": "Không tìm thấy CDP port. Nếu chạy Docker, đảm bảo đã chạy cdp-relay.js trên host",
   "cdpNotFoundScan": "Không tìm thấy CDP port sau full scan. Đảm bảo GemLogin đã mở browser với remote debugging",
-  "noProfileRunning": "Không có profile nào đang chạy"
+  "noProfileRunning": "Không có profile nào đang chạy",
+  "startInProgress": "GemLogin đang trong quá trình khởi động, vui lòng đợi"
 }

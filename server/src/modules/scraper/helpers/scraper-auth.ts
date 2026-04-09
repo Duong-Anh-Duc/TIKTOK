@@ -4,7 +4,7 @@
 import { logger } from '../../../utils/logger';
 import { solveCaptchaIfPresent } from '../../../utils/captcha-solver';
 import { handleEmailVerification, getExistingMessageIds } from '../../../utils/email-verifier';
-import { SHOP_ID } from '../../../constants';
+import { SHOP_ID, SHOP_REGION } from '../../../constants';
 
 /**
  * Tự động đăng nhập TikTok Shop nếu đang ở trang login
@@ -232,7 +232,7 @@ export async function testAutoLogin(): Promise<{ success: boolean; message: stri
   };
 
   try {
-    await page.goto('https://affiliate.tiktok.com/connection/creator?shop_region=VN&shop_id=' + SHOP_ID, {
+    await page.goto('https://affiliate.tiktok.com/connection/creator?shop_region=' + SHOP_REGION + '&shop_id=' + SHOP_ID, {
       waitUntil: 'domcontentloaded', timeout: 30000,
     });
     await page.waitForTimeout(5000);
@@ -287,13 +287,9 @@ export async function connectCDP() {
 
   if (!cdpUrl) {
     const { GemLoginService } = await import('../../gemlogin/gemlogin.service');
-    (GemLoginService as any).running = false;
-    (GemLoginService as any).activeProfileId = null;
-    cdpUrl = await GemLoginService.reconnect().catch(async () => {
-      const profileId = process.env.GEMLOGIN_PROFILE_ID || '1';
-      const result = await GemLoginService.startProfile(profileId);
-      return result.cdpUrl;
-    });
+    const profileId = process.env.GEMLOGIN_PROFILE_ID || '1';
+    const result = await GemLoginService.startProfile(profileId);
+    cdpUrl = result.cdpUrl;
     logger.info(`[Scraper] CDP mới: ${cdpUrl}`);
   }
 

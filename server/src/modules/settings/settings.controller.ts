@@ -37,9 +37,12 @@ export class SettingsController {
         tiktokPhone: env.TIKTOK_PHONE || '',
         tiktokPassword: env.TIKTOK_PASSWORD || '',
         tiktokPasswordSet: !!env.TIKTOK_PASSWORD,
+        tiktokShopId: env.TIKTOK_SHOP_ID || '',
+        tiktokShopRegion: env.TIKTOK_SHOP_REGION || 'VN',
         mailtmAddress: env.MAILTM_ADDRESS || '',
         mailtmPassword: env.MAILTM_PASSWORD || '',
         mailtmPasswordSet: !!env.MAILTM_PASSWORD,
+        concurrentTabs: parseInt(env.SCRAPER_CONCURRENT_TABS || '10', 10),
     };
     await setCache('settings', data, 60);
     res.json({ success: true, data });
@@ -47,7 +50,7 @@ export class SettingsController {
 
   static async update(req: Request, res: Response) {
     const t = (req as any).t;
-    const { ommoCaptchaKey, tiktokEmail, tiktokPhone, tiktokPassword, mailtmAddress, mailtmPassword } = req.body;
+    const { ommoCaptchaKey, tiktokEmail, tiktokPhone, tiktokPassword, tiktokShopId, tiktokShopRegion, mailtmAddress, mailtmPassword, concurrentTabs } = req.body;
     const env = readEnv();
 
     if (typeof ommoCaptchaKey === 'string' && ommoCaptchaKey.trim()) {
@@ -61,6 +64,15 @@ export class SettingsController {
     }
     if (typeof tiktokPassword === 'string' && tiktokPassword.trim()) {
       env.TIKTOK_PASSWORD = tiktokPassword.trim();
+    }
+    if (typeof tiktokShopId === 'string') {
+      env.TIKTOK_SHOP_ID = tiktokShopId.trim();
+    }
+    if (typeof tiktokShopRegion === 'string') {
+      env.TIKTOK_SHOP_REGION = tiktokShopRegion.trim() || 'VN';
+    }
+    if (typeof concurrentTabs === 'number' && concurrentTabs >= 1 && concurrentTabs <= 20) {
+      env.SCRAPER_CONCURRENT_TABS = String(concurrentTabs);
     }
     // Mail.tm — đồng bộ với TIKTOK_EMAIL nếu không set riêng
     if (typeof mailtmAddress === 'string') {

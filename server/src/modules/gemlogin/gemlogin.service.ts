@@ -153,124 +153,135 @@ export class GemLoginService {
     return match ? parseInt(match[1], 10) : 0;
   }
 
-  static async startProfile(profileId: string): Promise<StartProfileResult> {
-    if (this.running) {
-      throw new Error('gemlogin.alreadyRunning');
-    }
+  private static starting = false;
 
-    const inDocker = this.isDocker();
-
-    // Kiểm tra CDP đã sẵn sàng chưa (browser đang chạy từ trước)
-    logger.info('[GemLogin] Kiểm tra CDP đã sẵn sàng chưa (browser có thể đang chạy)...');
-    let cdpUrl = await GemLoginService.discoverCdp(5_000).catch(() => null);
-
-    if (cdpUrl) {
-      logger.info(`[GemLogin] CDP đã sẵn sàng: ${cdpUrl} — bỏ qua bước mở browser`);
-    } else {
-      // Browser chưa chạy — gọi GemLogin API để mở browser
-      logger.info(`[GemLogin] Gửi lệnh khởi động profile: ${profileId}`);
-
-      if (inDocker) {
-        try {
-          const raw = await request<any>('GET', `/api/profiles/start/${profileId}`, undefined, 300_000);
-          logger.info(`[GemLogin] Start API trả về: ${JSON.stringify(raw)}`);
-          const addr: string = raw?.data?.remote_debugging_address || raw?.remote_debugging_address || '';
-          if (addr) {
-            const chromePort = this.extractPort(addr);
-            logger.info(`[GemLogin] Chrome CDP port: ${chromePort}`);
-
-            if (chromePort > 0) {
-              const relayOk = await this.setRelayTarget(chromePort);
-              if (relayOk) {
-                const relayUrl = `http://host.docker.internal:${this.RELAY_CDP_PORT}`;
-                logger.info(`[GemLogin] Thử kết nối qua relay: ${relayUrl}`);
-                const deadline = Date.now() + 30_000;
-                while (Date.now() < deadline) {
-                  try {
-                    const r = await fetch(`${relayUrl}/json/version`, { signal: AbortSignal.timeout(2000) });
-                    if (r.ok) { cdpUrl = relayUrl; break; }
-                  } catch { /* relay chưa sẵn sàng */ }
-                  await new Promise(r => setTimeout(r, 2000));
-                }
-                if (cdpUrl) {
-                  logger.info(`[GemLogin] Kết nối qua relay thành công: ${cdpUrl}`);
-                } else {
-                  logger.warn('[GemLogin] Relay không trả lời CDP — kiểm tra cdp-relay.js');
-                }
-              }
-            }
-
-            // Fallback: thử kết nối trực tiếp qua host.docker.internal
-            if (!cdpUrl) {
-              const resolved = this.resolveHost(addr);
-              const testUrl = `http://${resolved}`;
-              logger.info(`[GemLogin] Fallback: thử trực tiếp ${testUrl}`);
-              const deadline = Date.now() + 15_000;
-              while (Date.now() < deadline) {
-                try {
-                  const r = await fetch(`${testUrl}/json/version`, { signal: AbortSignal.timeout(2000) });
-                  if (r.ok) { cdpUrl = testUrl; break; }
-                } catch { /* chưa sẵn sàng */ }
-                await new Promise(r => setTimeout(r, 2000));
-              }
-            }
+  /**
+   * Chờ CDP sẵn sàng từ remote_debugging_address trả về bởi GemLogin API.
+   */
+  private static async waitForCdpFromAddr(addr: string): Promise<string | null> {
+    if (this.isDocker()) {
+      const chromePort = this.extractPort(addr);
+      if (chromePort > 0) {
+        const relayOk = await this.setRelayTarget(chromePort);
+        if (relayOk) {
+          const relayUrl = `http://host.docker.internal:${this.RELAY_CDP_PORT}`;
+          const deadline = Date.now() + 30_000;
+          while (Date.now() < deadline) {
+            try {
+              const r = await fetch(`${relayUrl}/json/version`, { signal: AbortSignal.timeout(2000) });
+              if (r.ok) { logger.info(`[GemLogin] Relay OK: ${relayUrl}`); return relayUrl; }
+            } catch {}
+            await new Promise(r => setTimeout(r, 2000));
           }
-        } catch (err: any) {
-          logger.warn(`[GemLogin] Start API lỗi: ${err.message}`);
-        }
-
-        // Fallback cuối: scan qua host.docker.internal
-        if (!cdpUrl) {
-          logger.info('[GemLogin] Fallback cuối: scanning CDP trên host.docker.internal...');
-          cdpUrl = await GemLoginService.discoverCdp(60_000);
-        }
-      } else {
-        // Ngoài Docker: gọi start API và dùng port trả về trực tiếp
-        try {
-          const raw = await request<any>('GET', `/api/profiles/start/${profileId}`, undefined, 300_000);
-          logger.info(`[GemLogin] Start API trả về: ${JSON.stringify(raw)}`);
-          const addr: string = raw?.data?.remote_debugging_address || raw?.remote_debugging_address || '';
-          if (addr) {
-            const directUrl = `http://${addr}`;
-            logger.info(`[GemLogin] Thử kết nối trực tiếp: ${directUrl}`);
-            // Đợi CDP sẵn sàng (tối đa 30s)
-            const deadline2 = Date.now() + 30_000;
-            while (Date.now() < deadline2) {
-              try {
-                const r = await fetch(`${directUrl}/json/version`, { signal: AbortSignal.timeout(2000) });
-                if (r.ok) {
-                  const j = await r.json() as any;
-                  if (j?.webSocketDebuggerUrl) { cdpUrl = directUrl; break; }
-                }
-              } catch {}
-              await new Promise(r => setTimeout(r, 1000));
-            }
-            if (cdpUrl) {
-              logger.info(`[GemLogin] CDP kết nối trực tiếp OK: ${cdpUrl}`);
-            }
-          }
-        } catch (err: any) {
-          logger.warn(`[GemLogin] Start API lỗi: ${err.message}`);
-        }
-
-        // Fallback: scan port nếu kết nối trực tiếp thất bại
-        if (!cdpUrl) {
-          logger.info('[GemLogin] Fallback: scanning CDP port...');
-          cdpUrl = await GemLoginService.discoverCdp(90_000);
         }
       }
+      // Fallback trực tiếp
+      const resolved = this.resolveHost(addr);
+      const testUrl = `http://${resolved}`;
+      const deadline = Date.now() + 15_000;
+      while (Date.now() < deadline) {
+        try {
+          const r = await fetch(`${testUrl}/json/version`, { signal: AbortSignal.timeout(2000) });
+          if (r.ok) return testUrl;
+        } catch {}
+        await new Promise(r => setTimeout(r, 2000));
+      }
+      return null;
     }
 
-    if (!cdpUrl) {
-      throw new Error('gemlogin.cdpNotFoundDocker');
+    // Ngoài Docker
+    const directUrl = `http://${addr}`;
+    logger.info(`[GemLogin] Thử kết nối: ${directUrl}`);
+    const deadline = Date.now() + 30_000;
+    while (Date.now() < deadline) {
+      try {
+        const r = await fetch(`${directUrl}/json/version`, { signal: AbortSignal.timeout(2000) });
+        if (r.ok) {
+          const j = await r.json() as any;
+          if (j?.webSocketDebuggerUrl) { logger.info(`[GemLogin] CDP OK: ${directUrl}`); return directUrl; }
+        }
+      } catch {}
+      await new Promise(r => setTimeout(r, 1000));
+    }
+    return null;
+  }
+
+  /**
+   * Kiểm tra CDP URL có còn sống không.
+   */
+  private static async isCdpAlive(url: string): Promise<boolean> {
+    try {
+      const r = await fetch(`${url}/json/version`, { signal: AbortSignal.timeout(3000) });
+      if (!r.ok) return false;
+      const j = await r.json() as any;
+      return !!j?.webSocketDebuggerUrl;
+    } catch {
+      return false;
+    }
+  }
+
+  static async startProfile(profileId: string): Promise<StartProfileResult> {
+    // Nếu đã chạy và CDP còn sống, trả về ngay
+    if (this.running && process.env.CHROME_CDP_URL) {
+      if (await this.isCdpAlive(process.env.CHROME_CDP_URL)) {
+        logger.info(`[GemLogin] Profile đã chạy, CDP OK: ${process.env.CHROME_CDP_URL}`);
+        return { wsUrl: process.env.CHROME_CDP_URL, cdpUrl: process.env.CHROME_CDP_URL, profileId: this.activeProfileId || profileId };
+      }
+      // CDP chết → reset state
+      logger.warn(`[GemLogin] CDP cũ không còn sống, khởi động lại...`);
+      this.running = false;
+      this.activeProfileId = null;
+      process.env.CHROME_CDP_URL = '';
     }
 
-    this.activeProfileId = profileId;
-    this.running = true;
-    process.env.CHROME_CDP_URL = cdpUrl;
+    // Chống gọi đồng thời
+    if (this.starting) {
+      throw new Error('gemlogin.startInProgress');
+    }
+    this.starting = true;
 
-    logger.info(`[GemLogin] Profile ${profileId} sẵn sàng. CDP: ${cdpUrl}`);
-    return { wsUrl: cdpUrl, cdpUrl, profileId };
+    try {
+      let cdpUrl: string | null = null;
+      logger.info(`[GemLogin] Gửi lệnh khởi động profile: ${profileId}`);
+
+      for (let attempt = 1; attempt <= 3 && !cdpUrl; attempt++) {
+        try {
+          if (attempt > 1) {
+            // Close profile trước khi retry
+            logger.info(`[GemLogin] Lần ${attempt}: close profile trước khi retry...`);
+            await request<any>('GET', `/api/profiles/close/${profileId}`, undefined, 10_000).catch(() => {});
+            await new Promise(r => setTimeout(r, 3000));
+          }
+
+          const raw = await request<any>('GET', `/api/profiles/start/${profileId}`, undefined, 60_000);
+          logger.info(`[GemLogin] Start API lần ${attempt}: ${JSON.stringify(raw)}`);
+          const addr: string = raw?.data?.remote_debugging_address || raw?.remote_debugging_address || '';
+          if (addr) {
+            cdpUrl = await this.waitForCdpFromAddr(addr);
+            if (!cdpUrl) {
+              logger.warn(`[GemLogin] Lần ${attempt}: Start OK nhưng CDP không phản hồi (addr=${addr})`);
+            }
+          } else {
+            logger.warn(`[GemLogin] Lần ${attempt}: Start OK nhưng không có remote_debugging_address`);
+          }
+        } catch (err: any) {
+          logger.warn(`[GemLogin] Lần ${attempt} lỗi: ${err.message}`);
+        }
+      }
+
+      if (!cdpUrl) {
+        throw new Error('gemlogin.cdpNotFound');
+      }
+
+      this.activeProfileId = profileId;
+      this.running = true;
+      process.env.CHROME_CDP_URL = cdpUrl;
+
+      logger.info(`[GemLogin] Profile ${profileId} sẵn sàng. CDP: ${cdpUrl}`);
+      return { wsUrl: cdpUrl, cdpUrl, profileId };
+    } finally {
+      this.starting = false;
+    }
   }
 
   /**

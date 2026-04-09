@@ -14,6 +14,8 @@
   "ommoSaved": "OMMO Captcha key saved",
   "tiktokTitle": "Setup TikTok Shop",
   "tiktokDesc": "TikTok Shop email and password for auto-login when scraping data.",
+  "tiktokShopIdPlaceholder": "Shop ID (e.g. 7496312551686703552)",
+  "tiktokShopRegionPlaceholder": "Shop Region (e.g. VN)",
   "tiktokEmailPlaceholder": "TikTok Shop email",
   "tiktokPasswordPlaceholder": "TikTok Shop password",
   "enterTiktokEmail": "Please enter TikTok email",

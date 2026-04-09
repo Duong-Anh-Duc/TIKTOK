@@ -4,6 +4,9 @@ import { authenticate, authorize } from '../../middleware/auth';
 
 export const scraperRoutes = Router();
 
+// Public route — tải file không cần đăng nhập
+scraperRoutes.get('/files/public/:name', ScraperController.downloadFile);
+
 scraperRoutes.use(authenticate);
 
 scraperRoutes.post('/scrape', authorize('ADMIN', 'STAFF'), ScraperController.scrape);
@@ -17,4 +20,5 @@ scraperRoutes.delete('/creators', authorize('ADMIN'), ScraperController.deleteAl
 scraperRoutes.get('/files', ScraperController.listFiles);
 scraperRoutes.get('/files/:name', ScraperController.downloadFile);
 scraperRoutes.put('/files/:name/rename', authorize('ADMIN', 'STAFF'), ScraperController.renameFile);
+scraperRoutes.post('/files/delete-bulk', authorize('ADMIN'), ScraperController.deleteBulk);
 scraperRoutes.delete('/files/:name', authorize('ADMIN'), ScraperController.deleteFile);

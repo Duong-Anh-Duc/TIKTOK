@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Typography, Button, Table, Space, Popconfirm, message, Tooltip,
   Progress, InputNumber, Cascader, Select, Row, Col, Slider,
@@ -13,6 +13,7 @@ import * as XLSX from 'xlsx';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import AnimatedPage from '@/components/common/AnimatedPage';
+import apiClient from '@/api/client';
 import { scraperApi } from '@/api/scraper/scraper.api';
 import { CATEGORIES, CONTENT_TYPES, GMV_OPTIONS, ITEMS_SOLD_OPTIONS } from '@/data/categories';
 import { API, LIVE_VIEWER_MARKS, sliderToValue, valueToSlider } from '@/constants';
@@ -35,6 +36,18 @@ export default function ScraperPage() {
   const [filterLiveLink, setFilterLiveLink] = useState(false);
   const [filterTab, setFilterTab] = useState<'creator' | 'performance'>('creator');
   const [maxCreators, setMaxCreators] = useState<number>(0);
+  const [concurrentTabs, setConcurrentTabs] = useState<number>(5);
+
+  // Load concurrentTabs từ settings
+  useEffect(() => {
+    apiClient.get('/settings').then((res: any) => {
+      const tabs = res.data?.data?.concurrentTabs;
+      if (tabs) setConcurrentTabs(tabs);
+    }).catch(() => {});
+  }, []);
+
+  // Bulk selection
+  const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
 
   // Rename
   const [renameOpen, setRenameOpen] = useState(false);
@@ -89,7 +102,8 @@ export default function ScraperPage() {
     queryFn: () => scraperApi.listFiles(),
     refetchInterval: jobId ? API.filesPollInterval : false,
   });
-  const files = filesRes?.data?.data || [];
+  const allFiles = filesRes?.data?.data || [];
+  const files = allFiles.filter((f: any) => !f.name.includes('-simple'));
 
   const { data: jobRes } = useQuery({
     queryKey: ['scrape-job', jobId],
@@ -109,10 +123,37 @@ export default function ScraperPage() {
       queryClient.invalidateQueries({ queryKey: ['scraper-files'] });
       setTimeout(() => setJobId(null), 3000);
     } else if (job?.status === 'failed') {
-      message.error(t('scraper.scrapeFailed', { error: job.error }));
+      if (job.scraped > 0) {
+        message.warning(t('scraper.scrapeFailedPartial', { scraped: job.scraped, error: job.error }));
+        queryClient.invalidateQueries({ queryKey: ['scraper-files'] });
+      } else {
+        message.error(t('scraper.scrapeFailed', { error: job.error }));
+      }
       setTimeout(() => setJobId(null), 5000);
     }
   }, [job?.status]);
+
+  // Timer
+  const [elapsed, setElapsed] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (preparing || isRunning) {
+      setElapsed(0);
+      timerRef.current = setInterval(() => setElapsed(s => s + 1), 1000);
+    } else {
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [preparing, isRunning]);
+
+  const formatElapsed = (s: number) => {
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+    return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+  };
 
   const buildFilters = () => {
     const categoryLabels = selectedCategories.map((path) => {
@@ -136,7 +177,7 @@ export default function ScraperPage() {
       setPreparingMsg(t('scraper.preparingFilter'));
       await scraperApi.testFilter(filters);
       setPreparingMsg(t('scraper.preparingScrape'));
-      return scraperApi.scrape({ minCreators: maxCreators || 0, ...filters });
+      return scraperApi.scrape({ minCreators: maxCreators || 0, concurrentTabs, ...filters });
     },
     onSuccess: (res) => {
       const id = res.data?.data?.jobId;
@@ -177,9 +218,24 @@ export default function ScraperPage() {
     onError: (err: any) => message.error(err?.response?.data?.message || t('common.error')),
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (names: string[]) => scraperApi.deleteBulk(names),
+    onSuccess: () => {
+      message.success(t('scraper.deleted'));
+      setSelectedFiles([]);
+      queryClient.invalidateQueries({ queryKey: ['scraper-files'] });
+    },
+  });
+
+  const handleBulkDownload = async () => {
+    for (const fileName of selectedFiles) {
+      await handleDownload(fileName);
+    }
+  };
+
   const handleCopyLink = (fileName: string) => {
     const baseUrl = window.location.origin;
-    const link = `${baseUrl}/api/scraper/files/${encodeURIComponent(fileName)}`;
+    const link = `${baseUrl}/api/scraper/files/public/${encodeURIComponent(fileName)}`;
     navigator.clipboard.writeText(link);
     message.success(t('scraper.linkCopied'));
   };
@@ -223,6 +279,16 @@ export default function ScraperPage() {
       render: (size: number) => <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{formatSize(size)}</span>,
     },
     {
+      title: t('scraper.duration'), dataIndex: 'duration', key: 'duration', width: 120,
+      align: 'center' as const,
+      responsive: ['md' as const],
+      render: (duration: number | null) => (
+        <span style={{ fontSize: 13, color: duration ? '#25F4EE' : 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
+          {duration ? formatElapsed(duration) : '—'}
+        </span>
+      ),
+    },
+    {
       title: t('scraper.createdAt'), dataIndex: 'createdAt', key: 'createdAt', width: 170,
       responsive: ['lg' as const],
       render: (v: string) => (
@@ -240,16 +306,24 @@ export default function ScraperPage() {
               onClick={() => handlePreview(record.name)}
               style={{ color: '#FE2C55', padding: 0 }} />
           </Tooltip>
-          <Tooltip title={t('scraper.download')}>
+          <Dropdown menu={{ items: [
+            { key: 'full', label: t('scraper.downloadFull'), onClick: () => handleDownload(record.name) },
+            ...(allFiles.some((f: any) => f.name === record.name.replace('.xlsx', '-simple.xlsx'))
+              ? [{ key: 'simple', label: t('scraper.downloadSimple'), onClick: () => handleDownload(record.name.replace('.xlsx', '-simple.xlsx')) }]
+              : []),
+          ]}} trigger={['click']}>
             <Button type="link" size="small" icon={<DownloadOutlined />}
-              onClick={() => handleDownload(record.name)}
               style={{ color: '#25F4EE', padding: 0 }} />
-          </Tooltip>
-          <Tooltip title={t('scraper.copyLink')}>
+          </Dropdown>
+          <Dropdown menu={{ items: [
+            { key: 'full', label: t('scraper.shareFull'), onClick: () => handleCopyLink(record.name) },
+            ...(allFiles.some((f: any) => f.name === record.name.replace('.xlsx', '-simple.xlsx'))
+              ? [{ key: 'simple', label: t('scraper.shareSimple'), onClick: () => handleCopyLink(record.name.replace('.xlsx', '-simple.xlsx')) }]
+              : []),
+          ]}} trigger={['click']}>
             <Button type="link" size="small" icon={<LinkOutlined />}
-              onClick={() => handleCopyLink(record.name)}
               style={{ color: '#9B59B6', padding: 0 }} />
-          </Tooltip>
+          </Dropdown>
           <Tooltip title={t('scraper.rename')}>
             <Button type="link" size="small" icon={<EditOutlined />}
               onClick={() => openRename(record.name)}
@@ -439,6 +513,31 @@ export default function ScraperPage() {
         style={{ borderRadius: 16, border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)', marginTop: 20 }}
         styles={{ body: { padding: 0 } }}
       >
+        {selectedFiles.length > 0 && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px',
+            background: 'rgba(254,44,85,0.04)', borderBottom: '1px solid var(--border-color)',
+          }}>
+            <Text style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+              {t('scraper.selected', { count: selectedFiles.length })}
+            </Text>
+            <Button size="small" icon={<DownloadOutlined />} onClick={handleBulkDownload}
+              style={{ borderRadius: 8 }}>
+              {t('scraper.downloadAll')}
+            </Button>
+            <Popconfirm
+              title={t('scraper.deleteSelectedConfirm', { count: selectedFiles.length })}
+              onConfirm={() => bulkDeleteMutation.mutate(selectedFiles)}
+              okText={t('scraper.deleteConfirm')}
+              cancelText={t('common.cancel')}
+            >
+              <Button size="small" danger icon={<DeleteOutlined />}
+                loading={bulkDeleteMutation.isPending} style={{ borderRadius: 8 }}>
+                {t('scraper.deleteAll')}
+              </Button>
+            </Popconfirm>
+          </div>
+        )}
         <Table
           dataSource={files}
           columns={columns}
@@ -446,6 +545,10 @@ export default function ScraperPage() {
           loading={filesLoading}
           size="middle"
           scroll={{ x: 800 }}
+          rowSelection={{
+            selectedRowKeys: selectedFiles,
+            onChange: (keys) => setSelectedFiles(keys as string[]),
+          }}
           locale={{ emptyText: t('scraper.noFiles') }}
           pagination={{
             current: currentPage,
@@ -499,6 +602,11 @@ export default function ScraperPage() {
             <Title level={4} style={{ color: '#fff', margin: '28px 0 8px', letterSpacing: '-0.3px', fontSize: 22 }}>
               {t('scraper.scrapingData')}
             </Title>
+
+            <div className="overlay-timer">
+              <span className="overlay-timer-icon">&#9201;</span>
+              {formatElapsed(elapsed)}
+            </div>
 
             <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13 }}>
               {preparing

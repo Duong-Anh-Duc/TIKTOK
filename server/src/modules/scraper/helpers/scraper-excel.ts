@@ -45,6 +45,36 @@ export function saveXlsx(results: any[], isFinal = false): string {
   if (fs.existsSync(outPath)) fs.unlinkSync(outPath);
   XLSX.writeFile(wb, outPath);
 
+  // Bản rút gọn: chỉ xuất khi isFinal
+  if (isFinal && results.length > 0) {
+    const simpleData = [
+      ['STT', 'ID Kênh', 'Follow', 'Doanh thu', 'Hạng mục sản phẩm', 'Số lượng SP bán ra', 'Nguồn doanh thu', 'Zalo/SĐT'],
+      ...results.map((r, i) => [
+        i + 1,
+        r.username || '',
+        r.followers || '',
+        r.gmv || '',
+        r.categories || '',
+        r.items_sold || '',
+        r.content_type || '',
+        r.zalo || r.phone || '',
+      ]),
+    ];
+    const simpleWb = XLSX.utils.book_new();
+    const simpleWs = XLSX.utils.aoa_to_sheet(simpleData);
+    simpleWs['!cols'] = [
+      { wch: 4 }, { wch: 22 }, { wch: 12 }, { wch: 18 },
+      { wch: 25 }, { wch: 18 }, { wch: 25 }, { wch: 15 },
+    ];
+    XLSX.utils.book_append_sheet(simpleWb, simpleWs, 'Creators');
+
+    const simpleName = currentJobFile.replace('.xlsx', '-simple.xlsx');
+    const simplePath = path.resolve(logsDir, simpleName);
+    if (fs.existsSync(simplePath)) fs.unlinkSync(simplePath);
+    XLSX.writeFile(simpleWb, simplePath);
+    logger.info('[Scraper] File rút gọn: ' + simpleName);
+  }
+
   if (isFinal) currentJobFile = '';
 
   return outPath;

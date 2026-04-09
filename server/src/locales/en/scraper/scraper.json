@@ -17,5 +17,6 @@
   "newNameRequired": "New file name is required",
   "testLoginSuccess": "TikTok Shop login successful!",
   "testLoginFailed": "Login failed. Check email/password or captcha.",
-  "alreadyLoggedIn": "Already logged in, no login needed."
+  "alreadyLoggedIn": "Already logged in, no login needed.",
+  "filesDeleted": "Deleted {{count}} files"
 }

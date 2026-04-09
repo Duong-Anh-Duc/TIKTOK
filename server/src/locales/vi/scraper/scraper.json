@@ -17,5 +17,6 @@
   "newNameRequired": "Tên file mới là bắt buộc",
   "testLoginSuccess": "Đăng nhập TikTok Shop thành công!",
   "testLoginFailed": "Đăng nhập thất bại. Kiểm tra email/mật khẩu hoặc captcha.",
-  "alreadyLoggedIn": "Đã đăng nhập sẵn, không cần login lại."
+  "alreadyLoggedIn": "Đã đăng nhập sẵn, không cần login lại.",
+  "filesDeleted": "Đã xóa {{count}} file"
 }

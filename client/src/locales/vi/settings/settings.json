@@ -14,6 +14,8 @@
   "ommoSaved": "Đã lưu mã OMMO Captcha",
   "tiktokTitle": "Cấu hình TikTok Shop",
   "tiktokDesc": "Email và mật khẩu tài khoản TikTok Shop để tự động đăng nhập khi cào dữ liệu.",
+  "tiktokShopIdPlaceholder": "Shop ID (vd: 7496312551686703552)",
+  "tiktokShopRegionPlaceholder": "Khu vực Shop (vd: VN)",
   "tiktokEmailPlaceholder": "Email TikTok Shop",
   "tiktokPasswordPlaceholder": "Mật khẩu TikTok Shop",
   "enterTiktokEmail": "Vui lòng nhập email TikTok",

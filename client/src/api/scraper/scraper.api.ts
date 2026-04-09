@@ -31,4 +31,7 @@ export const scraperApi = {
 
   deleteFile: (name: string) =>
     apiClient.delete<ApiResponse>(`/scraper/files/${name}`),
+
+  deleteBulk: (names: string[]) =>
+    apiClient.post<ApiResponse>('/scraper/files/delete-bulk', { names }),
 };

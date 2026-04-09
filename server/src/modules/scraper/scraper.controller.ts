@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import fs from 'fs';
 import path from 'path';
 import { logger } from '../../utils/logger';
+import { SHOP_ID, CONCURRENT_TABS } from '../../constants';
 import { TikTokScraperService, testAutoLogin } from './tiktok-scraper.service';
 import { GemLoginService } from '../gemlogin/gemlogin.service';
 
@@ -23,9 +24,10 @@ export class ScraperController {
     const gmv: string[] = req.body?.gmv || [];
     const itemsSold: string[] = req.body?.itemsSold || [];
     const liveViewerMin: number = req.body?.liveViewerMin || 0;
+    const concurrentTabs: number = CONCURRENT_TABS;
 
     const job = await prisma.scrapeJob.create({
-      data: { shop_id: '7496039374454229703', status: 'running', started_at: new Date() },
+      data: { shop_id: SHOP_ID, status: 'running', started_at: new Date() },
     });
 
     res.json({
@@ -49,11 +51,13 @@ export class ScraperController {
           itemsSold,
           liveViewerMin,
           async (scraped, total, msg) => {
+
             await prisma.scrapeJob.update({
               where: { id: job.id },
               data: { scraped, total: total || scraped, status: 'running', message: msg || null },
             }).catch(() => {});
           },
+          concurrentTabs,
         );
 
         await prisma.scrapeJob.update({
@@ -69,9 +73,17 @@ export class ScraperController {
         logger.info(`[Scraper] Job done: ${result.saved} creators`);
       } catch (err: any) {
         logger.error(`[Scraper] Job failed: ${err.message}`);
+        // Lấy số lượng đã cào từ job hiện tại để hiển thị cho user
+        const currentJob = await prisma.scrapeJob.findUnique({ where: { id: job.id } }).catch(() => null);
+        const scraped = currentJob?.scraped || 0;
         await prisma.scrapeJob.update({
           where: { id: job.id },
-          data: { status: 'failed', error: err.message, finished_at: new Date() },
+          data: {
+            status: 'failed',
+            error: err.message,
+            finished_at: new Date(),
+            scraped,
+          },
         }).catch(() => {});
       }
     })();
@@ -209,14 +221,43 @@ export class ScraperController {
         res.json({ success: true, data: [] });
         return;
       }
+      // Lấy completed/failed jobs gần đây để match duration
+      const recentJobs = await prisma.scrapeJob.findMany({
+        where: { status: { in: ['completed', 'failed', 'captcha'] } },
+        orderBy: { finished_at: 'desc' },
+        take: 50,
+        select: { started_at: true, finished_at: true, scraped: true, total: true },
+      });
+
       const files = fs.readdirSync(LOGS_DIR)
         .filter(f => f.endsWith('.xlsx'))
         .map(f => {
           const stat = fs.statSync(path.join(LOGS_DIR, f));
+          const fileTime = stat.mtime.getTime();
+
+          // Match file với job gần nhất (finished_at gần thời gian file nhất, trong 60s)
+          let duration: number | null = null;
+          let jobScraped: number | null = null;
+          let jobTotal: number | null = null;
+          for (const job of recentJobs) {
+            if (job.finished_at && job.started_at) {
+              const diff = Math.abs(job.finished_at.getTime() - fileTime);
+              if (diff < 60000) {
+                duration = Math.round((job.finished_at.getTime() - job.started_at.getTime()) / 1000);
+                jobScraped = job.scraped;
+                jobTotal = job.total;
+                break;
+              }
+            }
+          }
+
           return {
             name: f,
             size: stat.size,
             createdAt: stat.mtime.toISOString(),
+            duration,
+            scraped: jobScraped,
+            total: jobTotal,
           };
         })
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -293,5 +334,28 @@ export class ScraperController {
       fs.unlinkSync(filePath);
     }
     res.json({ success: true, message: t ? t('scraper.fileDeleted') : 'File deleted' });
+  }
+
+  /**
+   * POST /api/scraper/files/delete-bulk
+   * Xóa nhiều file
+   */
+  static async deleteBulk(req: Request, res: Response) {
+    const t = (req as any).t;
+    const { names } = req.body;
+    if (!Array.isArray(names) || names.length === 0) {
+      res.status(400).json({ success: false, message: 'No files specified' });
+      return;
+    }
+    let deleted = 0;
+    for (const name of names) {
+      if (typeof name !== 'string' || !name.endsWith('.xlsx') || name.includes('..')) continue;
+      const filePath = path.join(LOGS_DIR, name);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        deleted++;
+      }
+    }
+    res.json({ success: true, message: t ? t('scraper.filesDeleted', { count: deleted }) : `Deleted ${deleted} files`, data: { deleted } });
   }
 }

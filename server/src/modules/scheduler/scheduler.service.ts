@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { TikTokScraperService } from '../scraper/tiktok-scraper.service';
 import { GemLoginService } from '../gemlogin/gemlogin.service';
 import { logger } from '../../utils/logger';
+import { SHOP_ID } from '../../constants';
 import { acquireScraperLock, releaseScraperLock, isScraperRunning } from '../../utils/scraperLock';
 
 const prisma = new PrismaClient();
@@ -60,7 +61,7 @@ class SchedulerService {
     logger.info(`[Scheduler] Executing schedule: ${schedule.name}`);
 
     const job = await prisma.scrapeJob.create({
-      data: { shop_id: '7496039374454229703', status: 'running', started_at: new Date(), message: `[Auto] ${schedule.name}` },
+      data: { shop_id: SHOP_ID, status: 'running', started_at: new Date(), message: `[Auto] ${schedule.name}` },
     });
 
     await prisma.scrapeSchedule.update({
