@@ -5,3 +5,5 @@ dist/
 .chrome-data/
 *.log
 .DS_Store
+server/data/scrape-debug/
+server/data/*.log.txt

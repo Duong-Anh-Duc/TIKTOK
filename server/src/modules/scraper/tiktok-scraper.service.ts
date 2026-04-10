@@ -5,7 +5,7 @@
 import { logger } from '../../utils/logger';
 import { autoLoginIfNeeded, connectCDP } from './helpers/scraper-auth';
 import { scrapeContactInTab } from './helpers/scraper-contact';
-import { saveXlsx } from './helpers/scraper-excel';
+import { saveXlsx, appendCreatorLog, finalizeCreatorLog } from './helpers/scraper-excel';
 import { applyAllFilters } from './helpers/scraper-filters';
 
 export { testAutoLogin } from './helpers/scraper-auth';
@@ -307,13 +307,23 @@ export class TikTokScraperService {
             }
           };
 
-          let contactInfo = await scrapeContactInTab(tabPage, creator.oecuid, captchaCallback);
+          let contactInfo = await scrapeContactInTab(tabPage, creator.oecuid, captchaCallback, creator.handle);
 
-          // Retry 1 lần nếu miss data (không phải do captcha)
-          if (!contactInfo && !captchaBlocked) {
-            logger.info('[Scraper] Retry [' + globalIdx + '/' + totalCreators + '] ' + creator.handle);
-            await tabPage.waitForTimeout(2000);
-            contactInfo = await scrapeContactInTab(tabPage, creator.oecuid, captchaCallback);
+          // Nếu null (data load lỗi) → close tab cũ + tạo tab mới + retry, max 2 lần
+          let currentTab = tabPage;
+          for (let outerRetry = 0; outerRetry < 2 && !contactInfo && !captchaBlocked; outerRetry++) {
+            logger.info('[Scraper] Outer retry ' + (outerRetry + 1) + '/2 [' + globalIdx + '/' + totalCreators + '] ' + creator.handle + ' — close tab cũ + tạo tab mới');
+            try {
+              await currentTab.close().catch(() => {});
+            } catch {}
+            // Tạo tab mới
+            const newTab = await ctx.newPage();
+            const newCdp = await newTab.context().newCDPSession(newTab);
+            await newCdp.send('Network.setCacheDisabled', { cacheDisabled: true });
+            detailPages[idx] = newTab;
+            currentTab = newTab;
+            await newTab.waitForTimeout(1500);
+            contactInfo = await scrapeContactInTab(newTab, creator.oecuid, captchaCallback, creator.handle);
           }
 
           if (contactInfo) captchaFailCount = 0;
@@ -336,6 +346,7 @@ export class TikTokScraperService {
           };
 
           results.push(r);
+          appendCreatorLog(globalIdx, totalCreators, r);
           logger.info('[Scraper] ' + r.username + ' | Z:' + (r.zalo || '-') + ' | W:' + (r.whatsapp || '-') + ' | E:' + (r.email || '-'));
           onProgress?.(results.length, totalCreators, '[' + results.length + '/' + totalCreators + '] ' + r.username);
         });
@@ -353,6 +364,7 @@ export class TikTokScraperService {
       for (const p of detailPages) await p.close().catch(() => {});
 
       const outPath = saveXlsx(results, true);
+      finalizeCreatorLog(results);
       logger.info('[Scraper] Hoàn tất: ' + results.length + ' creators → ' + outPath);
 
       return { total: totalCreators, saved: results.length, captchaBlocked };
@@ -361,6 +373,7 @@ export class TikTokScraperService {
       // Lưu partial results khi gặp lỗi (network, timeout, etc.)
       if (results.length > 0) {
         const outPath = saveXlsx(results, true);
+        finalizeCreatorLog(results);
         logger.info('[Scraper] Lỗi giữa chừng — đã lưu ' + results.length + '/' + totalCreators + ' creators → ' + outPath);
       }
       throw err;

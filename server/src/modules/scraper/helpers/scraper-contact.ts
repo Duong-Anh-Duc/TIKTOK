@@ -21,17 +21,134 @@ export interface ContactResult {
 }
 
 /**
+ * Dump innerText của trang detail vào file txt để debug
+ */
+async function dumpDomDebug(page: any, username: string, cid: string): Promise<void> {
+  try {
+    const fs = await import('fs');
+    const pathMod = await import('path');
+    const debugDir = pathMod.resolve(__dirname, '..', '..', '..', '..', 'data', 'scrape-debug');
+    if (!fs.existsSync(debugDir)) fs.mkdirSync(debugDir, { recursive: true });
+
+    const dump = await page.evaluate(`
+      (function() {
+        var result = {
+          url: window.location.href,
+          title: document.title,
+          bodyText: '',
+          profileSection: '',
+          doanhSoSection: '',
+          allLabels: []
+        };
+
+        // Toàn bộ body innerText
+        result.bodyText = document.body.innerText || '';
+
+        // Profile header section (chứa Điểm/Danh mục/Người theo dõi)
+        var allDivs = document.querySelectorAll('div');
+        for (var d of allDivs) {
+          var t = (d.innerText || '').trim();
+          if (t.includes('Điểm') && t.includes('Danh mục') && t.includes('Người theo dõi') && t.length < 1000) {
+            result.profileSection = t;
+            break;
+          }
+        }
+
+        // Doanh số section
+        for (var d2 of allDivs) {
+          var t2 = (d2.innerText || '').trim();
+          if (t2.includes('GMV') && t2.includes('Số món bán ra') && t2.length < 3000) {
+            result.doanhSoSection = t2;
+            break;
+          }
+        }
+
+        // Tất cả label nhỏ (để debug DOM structure)
+        var smallEls = document.querySelectorAll('div, span, h3, h4, label');
+        var seen = {};
+        for (var el of smallEls) {
+          if (el.children.length > 1) continue;
+          var et = (el.textContent || '').trim();
+          if (et.length === 0 || et.length > 50) continue;
+          if (seen[et]) continue;
+          seen[et] = true;
+          if (/^(GMV|Số món bán ra|Items sold|GPM|Danh mục|Categories|Điểm|Người theo dõi|Followers|Hạng mục)/i.test(et)) {
+            result.allLabels.push({
+              text: et,
+              tag: el.tagName,
+              nextSibling: el.nextElementSibling ? (el.nextElementSibling.textContent || '').trim().slice(0, 100) : null,
+              parentText: el.parentElement ? (el.parentElement.textContent || '').trim().slice(0, 200) : null,
+            });
+          }
+        }
+
+        return result;
+      })()
+    `).catch(() => null);
+
+    if (!dump) return;
+
+    const safeName = (username || cid).replace(/[^a-zA-Z0-9_.-]/g, '_').slice(0, 50);
+    const filePath = pathMod.resolve(debugDir, safeName + '.txt');
+
+    const content = [
+      '='.repeat(80),
+      'CREATOR DOM DUMP',
+      '='.repeat(80),
+      'Username: ' + username,
+      'CID:      ' + cid,
+      'URL:      ' + dump.url,
+      'Title:    ' + dump.title,
+      'Time:     ' + new Date().toLocaleString(),
+      '',
+      '─'.repeat(80),
+      'PROFILE SECTION (Điểm/Danh mục/Người theo dõi)',
+      '─'.repeat(80),
+      dump.profileSection || '(EMPTY — không tìm thấy block profile)',
+      '',
+      '─'.repeat(80),
+      'DOANH SỐ SECTION (GMV/Số món bán ra/...)',
+      '─'.repeat(80),
+      dump.doanhSoSection || '(EMPTY — không tìm thấy block doanh số)',
+      '',
+      '─'.repeat(80),
+      'ALL LABELS DETECTED (DOM structure debug)',
+      '─'.repeat(80),
+      ...dump.allLabels.map((l: any) =>
+        '• [' + l.tag + '] "' + l.text + '"\n' +
+        '    nextSibling: ' + (l.nextSibling || '(null)') + '\n' +
+        '    parentText:  ' + (l.parentText || '(null)').replace(/\n/g, ' ⏎ ')
+      ),
+      '',
+      '─'.repeat(80),
+      'FULL BODY INNERTEXT',
+      '─'.repeat(80),
+      dump.bodyText,
+      '',
+    ].join('\n');
+
+    fs.writeFileSync(filePath, content);
+    logger.info('[Scraper] DOM dump: scrape-debug/' + safeName + '.txt');
+  } catch (e: any) {
+    logger.warn('[Scraper] Không dump được DOM: ' + e.message);
+  }
+}
+
+/**
  * Cào contact info + doanh số từ detail page
  */
 export async function scrapeContactInTab(
   page: any,
   cid: string,
   setCaptchaBlocked: (v: boolean) => void,
+  username?: string,
 ): Promise<ContactResult | null> {
   try {
     let gotProfile = false;
     let gotPerformance = false;
     let bio = '';
+    let apiCategories = '';  // Categories lấy từ API (chính xác nhất)
+    let apiFollowers = '';
 
     const onResponse = async (resp: any) => {
       try {
@@ -42,6 +159,21 @@ export async function scrapeContactInTab(
           if (json?.creator_profile) {
             gotProfile = true;
             bio = json.creator_profile.bio?.value || '';
+            // Extract categories từ API
+            // Extract categories: thử nhiều key formats
+            const cp = json.creator_profile;
+            const catList = cp.content_category_list || cp.category_list || cp.categories;
+            if (Array.isArray(catList) && catList.length > 0) {
+              apiCategories = catList.map((c: any) => c.value || c.name || c.label || c).join(', ');
+            }
+            // Fallback: key "category" có structure { value: [{name: "..."}, ...] }
+            if (!apiCategories && cp.category?.value && Array.isArray(cp.category.value)) {
+              apiCategories = cp.category.value.map((c: any) => c.name || c.value || c.label || c).join(', ');
+            }
+            if (apiCategories) logger.info('[Scraper] API categories: ' + apiCategories);
+            // Extract followers từ API
+            const fc = json.creator_profile.follower_cnt?.value || json.creator_profile.followers?.value;
+            if (fc) apiFollowers = String(fc);
           }
         }
         // Detect khi phần doanh số/biểu đồ đã load
@@ -98,6 +230,117 @@ export async function scrapeContactInTab(
     page.removeListener('response', onResponse);
     await page.waitForTimeout(500);
 
+    // Detect "Lỗi tải dữ liệu" và reload tối đa 2 lần trong cùng tab
+    // (nếu vẫn fail sẽ return null → outer retry sẽ tạo tab mới)
+    const MAX_RELOAD_ATTEMPTS = 2;
+    let dataLoaded = false;
+    for (let attempt = 0; attempt < MAX_RELOAD_ATTEMPTS; attempt++) {
+      // Đợi DOM render — poll cho đến khi GMV card có VALUE thực (không phải "--" hoặc lỗi)
+      const domDeadline = Date.now() + 10000;
+      while (Date.now() < domDeadline) {
+        const status = await page.evaluate(`
+          (function() {
+            // Check 1: Có đang hiển thị "Tải dữ liệu không thành công"?
+            var bodyText = document.body.innerText || '';
+            var hasError = bodyText.includes('Tải dữ liệu không thành công') ||
+                           bodyText.includes('Failed to load data');
+
+            // Check 2: GMV card có VALUE thực không?
+            var labels = document.querySelectorAll('div, span');
+            var gmvHasValue = false;
+            for (var el of labels) {
+              if (el.children.length > 1) continue;
+              var t = (el.textContent || '').trim().replace(/[ⓘ?]/g, '').trim();
+              if (t !== 'GMV') continue;
+              // Walk up parent → tìm value
+              var cur = el;
+              for (var d = 0; d < 5; d++) {
+                cur = cur.parentElement;
+                if (!cur) break;
+                var inner = (cur.innerText || '').trim();
+                var lines = inner.split('\\n').map(function(l) { return l.trim().replace(/[ⓘ?]/g, '').trim(); }).filter(Boolean);
+                for (var k = 0; k < lines.length - 1; k++) {
+                  if (lines[k] === 'GMV') {
+                    var val = lines[k + 1];
+                    // Value hợp lệ: phải có số hoặc range, KHÔNG phải "--"
+                    if (val && val !== '--' && /[\\d]/.test(val)) {
+                      gmvHasValue = true;
+                      break;
+                    }
+                  }
+                }
+                if (gmvHasValue) break;
+              }
+              if (gmvHasValue) break;
+            }
+
+            // Check 3: Profile section có "Người theo dõi" với value không?
+            var profileOk = false;
+            for (var el2 of labels) {
+              if (el2.children.length > 1) continue;
+              var t2 = (el2.textContent || '').trim();
+              if (t2 !== 'Người theo dõi' && t2 !== 'Followers') continue;
+              var sib = el2.nextElementSibling;
+              if (sib) {
+                var v = (sib.textContent || '').trim();
+                if (/^[\\d,.]+\\s*(K|M|B|Tr)?$/i.test(v)) { profileOk = true; break; }
+              }
+            }
+
+            return { hasError: hasError, gmvHasValue: gmvHasValue, profileOk: profileOk };
+          })()
+        `).catch(() => ({ hasError: false, gmvHasValue: false, profileOk: false }));
+
+        // Nếu có error → break để click "Thử lại"
+        if (status.hasError) break;
+        // Nếu cả profile và GMV đều OK → done
+        if (status.profileOk && status.gmvHasValue) {
+          dataLoaded = true;
+          break;
+        }
+        await page.waitForTimeout(400);
+      }
+
+      if (dataLoaded) break;
+
+      // Detect lại error và profile status để quyết định reload
+      const finalStatus = await page.evaluate(`
+        (function() {
+          var bodyText = document.body.innerText || '';
+          return {
+            hasError: bodyText.includes('Tải dữ liệu không thành công') || bodyText.includes('Failed to load data'),
+          };
+        })()
+      `).catch(() => ({ hasError: false }));
+
+      if (attempt < MAX_RELOAD_ATTEMPTS - 1) {
+        logger.info('[Scraper] Data load lỗi/chưa đủ (attempt ' + (attempt + 1) + '/' + MAX_RELOAD_ATTEMPTS + ')' +
+          (finalStatus.hasError ? ' — phát hiện "Lỗi tải dữ liệu"' : '') + ' → reload page...');
+
+        // Reset flags + reload
+        gotProfile = false;
+        gotPerformance = false;
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
+        await page.waitForTimeout(2000);
+
+        // Đợi API response
+        const apiDl = Date.now() + 6000;
+        while ((!gotProfile || !gotPerformance) && Date.now() < apiDl) {
+          await page.waitForTimeout(300);
+        }
+        // Scroll để trigger load
+        await page.evaluate('window.scrollBy(0, 800)').catch(() => {});
+        await page.waitForTimeout(1500);
+      }
+    }
+
+    if (!dataLoaded) {
+      logger.warn('[Scraper] Data chưa load đầy đủ trong tab này (cid=' + cid + ') → return null để outer retry tạo tab mới');
+      page.removeListener('response', onResponse);
+      return null;
+    }
+    await page.waitForTimeout(500);
+
     // Fallback bio from DOM
     if (!bio) {
       bio = await page.evaluate(`
@@ -120,40 +363,40 @@ export async function scrapeContactInTab(
       `).catch(() => '');
     }
 
-    // Followers từ DOM
+    // Followers từ DOM — chỉ accept format số (vd: 1,1K, 965, 14,7K)
     let detailFollowers = '';
     detailFollowers = await page.evaluate(`
       (function() {
+        var followerRegex = /^[\\d,.]+\\s*(K|M|B|Tr)?$/i;
         var els = document.querySelectorAll('div, span');
         for (var i = 0; i < els.length; i++) {
-          var t = (els[i].textContent || '').trim();
-          if (t === 'Người theo dõi' || t === 'Followers') {
-            // Giá trị nằm ở sibling hoặc dòng kế trong parent
-            var parent = els[i].parentElement;
-            if (parent) {
-              var lines = parent.innerText.split('\\n').map(function(l) { return l.trim(); }).filter(Boolean);
-              for (var j = 0; j < lines.length; j++) {
-                if (lines[j] === t && j + 1 < lines.length) {
-                  return lines[j + 1];
-                }
-              }
-              // Nếu parent chỉ chứa label, check previous sibling
-              var prev = els[i].previousElementSibling;
-              if (prev) {
-                var v = (prev.textContent || '').trim();
-                if (v.match(/[\\d,.]+(K|M|B|Tr)?/i)) return v;
-              }
-              var next = els[i].nextElementSibling;
-              if (next) {
-                var v2 = (next.textContent || '').trim();
-                if (v2.match(/[\\d,.]+(K|M|B|Tr)?/i)) return v2;
-              }
+          var el = els[i];
+          if (el.children.length > 1) continue;
+          var t = (el.textContent || '').trim();
+          if (t !== 'Người theo dõi' && t !== 'Followers') continue;
+
+          // Strategy 1: nextElementSibling
+          var sib = el.nextElementSibling;
+          if (sib) {
+            var v = (sib.textContent || '').trim();
+            if (followerRegex.test(v)) return v;
+          }
+          // Strategy 2: parent có 2 children → child kia
+          var parent = el.parentElement;
+          if (parent && parent.children.length === 2) {
+            for (var ch of parent.children) {
+              if (ch === el) continue;
+              var v2 = (ch.textContent || '').trim();
+              if (followerRegex.test(v2)) return v2;
             }
           }
         }
         return '';
       })()
     `).catch(() => '');
+
+    // Fallback followers từ API nếu DOM miss
+    if (!detailFollowers && apiFollowers) detailFollowers = apiFollowers;
 
     // Phone
     let phone = '';
@@ -279,159 +522,297 @@ export async function scrapeContactInTab(
     await page.evaluate('window.scrollBy(0, 800)');
     await page.waitForTimeout(2000);
 
-    // Scrape GMV, Số món bán ra, Nguồn doanh thu từ block text "Doanh số"
+    // Scrape GMV, Số món bán ra, Nguồn doanh thu, Hạng mục — extractor mới (nextElementSibling + walk up)
     const detailData = await page.evaluate(`
       (function() {
         var result = { gmv: '', itemsSold: '', categories: '', revenueSource: '' };
+        var junkPattern = /(Điểm|Chưa có điểm|Người theo dõi|Followers|Mời|Invite|Doanh số|Số liệu|Xu hướng|Video ví dụ|Nhà sáng tạo)/i;
+        var labelPattern = /^(GMV|GPM|Số món bán ra|Items sold|Danh mục|Categories|Người theo dõi|Followers|Điểm|Chưa có điểm)$/i;
 
-        // Tìm block chứa "GMV từ mỗi kênh bán hàng" — block này có toàn bộ data cần thiết
-        var allDivs = document.querySelectorAll('div');
-        var perfBlock = '';
-        for (var d of allDivs) {
-          var t = (d.innerText || '').trim();
-          if (t.includes('GMV từ mỗi kênh') && t.includes('Số món bán ra') && t.length < 2000) {
-            perfBlock = t;
-            break;
+        // Tìm element có text exact match label, đơn giản (ít children)
+        function findLabelEl(labelTexts) {
+          var els = document.querySelectorAll('span, div, h3, h4, label');
+          for (var i = 0; i < els.length; i++) {
+            var el = els[i];
+            if (el.children.length > 1) continue;
+            var t = (el.textContent || '').trim();
+            for (var j = 0; j < labelTexts.length; j++) {
+              if (t === labelTexts[j]) return el;
+            }
+          }
+          return null;
+        }
+
+        // Từ label el → tìm value qua nextElementSibling hoặc walk up parent
+        function getValueFromLabel(labelEl, valueRegex) {
+          // Strategy 1: nextElementSibling
+          var sib = labelEl.nextElementSibling;
+          if (sib) {
+            var v = (sib.textContent || '').trim();
+            if (v && v.length < 100 && !labelPattern.test(v) && !junkPattern.test(v)) {
+              if (!valueRegex || valueRegex.test(v)) return v;
+            }
+          }
+          // Strategy 2: walk up parent → tìm dòng kế label trong innerText
+          var labelText = (labelEl.textContent || '').trim().replace(/[ⓘ?]/g, '').trim();
+          var cur = labelEl;
+          for (var d = 0; d < 5; d++) {
+            cur = cur.parentElement;
+            if (!cur) break;
+            var inner = (cur.innerText || '').trim();
+            var lines = inner.split('\\n').map(function(l) { return l.trim().replace(/[ⓘ?]/g, '').trim(); }).filter(Boolean);
+            for (var k = 0; k < lines.length - 1; k++) {
+              if (lines[k] === labelText) {
+                var val = lines[k + 1];
+                if (val && val.length < 100 && !labelPattern.test(val) && !junkPattern.test(val)) {
+                  if (!valueRegex || valueRegex.test(val)) return val;
+                }
+              }
+            }
+          }
+          return '';
+        }
+
+        // GMV — chỉ "GMV" exact
+        var gmvEl = findLabelEl(['GMV']);
+        if (gmvEl) {
+          result.gmv = getValueFromLabel(gmvEl, /[\\d,.\\-]/);
+        }
+
+        // Số món bán ra
+        var itemsEl = findLabelEl(['Số món bán ra', 'Items sold']);
+        if (itemsEl) {
+          result.itemsSold = getValueFromLabel(itemsEl, /^[\\d,.\\-]+/);
+        }
+
+        // Nguồn doanh thu (GMV từ mỗi kênh bán hàng / Revenue of sales channel)
+        var revEl = findLabelEl(['GMV từ mỗi kênh bán hàng', 'GMV by sales channel', 'Revenue of sales channel']);
+        if (revEl) {
+          var cur = revEl;
+          for (var dr = 0; dr < 5; dr++) {
+            cur = cur.parentElement;
+            if (!cur) break;
+            var inner = (cur.innerText || '').trim();
+            if (inner.length > 800) break;
+            var lines = inner.split('\\n').map(function(l) { return l.trim(); }).filter(Boolean);
+            var labelIdx = -1;
+            for (var li = 0; li < lines.length; li++) {
+              if (/GMV từ mỗi kênh|Revenue of sales channel/i.test(lines[li])) { labelIdx = li; break; }
+            }
+            if (labelIdx < 0) continue;
+            var endIdx = lines.length;
+            for (var ei = labelIdx + 1; ei < lines.length; ei++) {
+              if (/GMV theo hạng mục|GMV by product|Revenue of categories/i.test(lines[ei])) { endIdx = ei; break; }
+            }
+            var revLines = lines.slice(labelIdx + 1, endIdx);
+            revLines = revLines.filter(function(l) { return l !== '100%' && l !== '--'; });
+            var names = [], pcts = [];
+            for (var rli = 0; rli < revLines.length; rli++) {
+              var rl = revLines[rli];
+              if (/^[\\d,]+[.,]\\d+%$/.test(rl)) pcts.push(rl);
+              else if (rl.length > 1 && !/^\\d+%$/.test(rl)) names.push(rl);
+            }
+            // Dedupe names
+            var seen = {};
+            var uniqueNames = [];
+            for (var ni = 0; ni < names.length; ni++) {
+              if (!seen[names[ni]]) { seen[names[ni]] = true; uniqueNames.push(names[ni]); }
+            }
+            var items = [];
+            for (var ri = 0; ri < uniqueNames.length && ri < pcts.length; ri++) {
+              items.push(uniqueNames[ri] + ' ' + pcts[ri]);
+            }
+            if (items.length > 0) {
+              result.revenueSource = items.join(', ');
+              break;
+            }
           }
         }
 
-        if (perfBlock) {
-          var lines = perfBlock.split('\\n').map(function(l) { return l.trim(); }).filter(Boolean);
-
-          // GMV: dòng ngay sau "GMV" (nhưng trước "Số món bán ra")
-          for (var i = 0; i < lines.length; i++) {
-            if (lines[i].match(/^GMV\\s*$/) || lines[i].match(/^GMV\\s*[①②③]?$/)) {
-              if (i + 1 < lines.length) {
-                result.gmv = lines[i + 1];
-              }
-              break;
+        // Hạng mục sản phẩm: tìm "Danh mục" exact → nextElementSibling
+        var catEl = findLabelEl(['Danh mục', 'Categories']);
+        if (catEl) {
+          var sib2 = catEl.nextElementSibling;
+          if (sib2) {
+            var sibText = (sib2.textContent || '').trim();
+            sibText = sibText.replace(/\\s*,?\\s*\\+\\s*\\d+\\s*$/, '').trim();
+            if (sibText && sibText.length > 2 && sibText.length < 200 && !junkPattern.test(sibText)) {
+              result.categories = sibText;
             }
           }
-
-          // Số món bán ra: dòng ngay sau "Số món bán ra"
-          for (var j = 0; j < lines.length; j++) {
-            if (lines[j].match(/^Số món bán ra/i) || lines[j].match(/^Items sold/i)) {
-              if (j + 1 < lines.length) {
-                result.itemsSold = lines[j + 1];
-              }
-              break;
-            }
-          }
-
-          // Nguồn doanh thu: parse "GMV từ mỗi kênh bán hàng" section
-          var revIdx = -1;
-          for (var k = 0; k < lines.length; k++) {
-            if (lines[k].match(/GMV từ mỗi kênh/i) || lines[k].match(/GMV by sales channel/i)) {
-              revIdx = k + 1;
-              break;
-            }
-          }
-          // Tìm end index (GMV theo hạng mục hoặc end of block)
-          var revEndIdx = lines.length;
-          for (var m = revIdx; m < lines.length; m++) {
-            if (lines[m].match(/GMV theo hạng mục/i) || lines[m].match(/GMV by product/i)) {
-              revEndIdx = m;
-              break;
-            }
-          }
-          if (revIdx > 0 && revIdx < lines.length) {
-            // Format: LIVE\\nVideo\\nThẻ sản phẩm\\n83,19%\\n16,29%\\n0,52%
-            // Hoặc: LIVE\\n83,19%\\nVideo\\n16,29%\\nThẻ sản phẩm\\n0,52%
-            var revLines = lines.slice(revIdx, revEndIdx);
-            var channelNames = [];
-            var channelPcts = [];
-            for (var n = 0; n < revLines.length; n++) {
-              if (revLines[n].match(/^[\\d,]+[.,]\\d+%$/)) {
-                channelPcts.push(revLines[n]);
-              } else if (revLines[n].length > 1 && !revLines[n].match(/^[\\d,]+[.,]\\d+%$/)) {
-                channelNames.push(revLines[n]);
-              }
-            }
-            var revItems = [];
-            for (var r = 0; r < channelNames.length && r < channelPcts.length; r++) {
-              revItems.push(channelNames[r] + ' ' + channelPcts[r]);
-            }
-            if (revItems.length > 0) {
-              result.revenueSource = revItems.join(', ');
-            }
-          }
-        }
-
-        // Hạng mục sản phẩm: lấy từ phần "Danh mục" ở profile trên cùng
-        // Cũng lấy từ "GMV theo hạng mục sản phẩm" nếu có
-        var catFromChart = [];
-        var catIdx = -1;
-        if (perfBlock) {
-          var pLines = perfBlock.split('\\n').map(function(l) { return l.trim(); }).filter(Boolean);
-          for (var p = 0; p < pLines.length; p++) {
-            if (pLines[p].match(/GMV theo hạng mục/i) || pLines[p].match(/GMV by product/i)) {
-              catIdx = p + 1;
-              break;
-            }
-          }
-          if (catIdx > 0) {
-            for (var q = catIdx; q < pLines.length; q++) {
-              if (pLines[q].match(/\\d+[.,]\\d+%/)) continue;
-              if (pLines[q].match(/^(Khác|Other)$/i)) { catFromChart.push(pLines[q]); continue; }
-              if (pLines[q].length > 2 && pLines[q].length < 100 && !pLines[q].match(/\\d+[.,]\\d+%/)) {
-                catFromChart.push(pLines[q]);
+          if (!result.categories) {
+            var parent2 = catEl.parentElement;
+            if (parent2 && parent2.children.length === 2) {
+              for (var ch of parent2.children) {
+                if (ch === catEl) continue;
+                var chText = (ch.textContent || '').trim();
+                chText = chText.replace(/\\s*,?\\s*\\+\\s*\\d+\\s*$/, '').trim();
+                if (chText && chText.length > 2 && chText.length < 200 && !junkPattern.test(chText)) {
+                  result.categories = chText;
+                  break;
+                }
               }
             }
           }
         }
-        if (catFromChart.length > 0) {
-          result.categories = catFromChart.filter(function(c) { return c !== 'Khác' && c !== 'Other'; }).join(', ');
+
+        // Fallback categories: từ chart "GMV theo hạng mục sản phẩm"
+        if (!result.categories) {
+          var chartEl = findLabelEl(['GMV theo hạng mục sản phẩm', 'GMV by product category', 'Revenue of categories', 'Revenue of product categories']);
+          if (chartEl) {
+            var cur2 = chartEl;
+            for (var dc = 0; dc < 5; dc++) {
+              cur2 = cur2.parentElement;
+              if (!cur2) break;
+              var inner2 = (cur2.innerText || '').trim();
+              if (inner2.length > 800) break;
+              var lines2 = inner2.split('\\n').map(function(l) { return l.trim(); }).filter(Boolean);
+              var startIdx = -1;
+              for (var li2 = 0; li2 < lines2.length; li2++) {
+                if (/GMV theo hạng mục|Revenue of categor/i.test(lines2[li2])) { startIdx = li2 + 1; break; }
+              }
+              if (startIdx < 0) continue;
+              var cats = [];
+              var seenCat = {};
+              for (var ci = startIdx; ci < lines2.length; ci++) {
+                var cl = lines2[ci];
+                if (cl === '100%' || /^\\d+[.,]\\d+%$/.test(cl) || /^\\d+%$/.test(cl)) continue;
+                if (cl === 'Khác' || cl === 'Other') continue;
+                if (junkPattern.test(cl) || labelPattern.test(cl)) break;
+                if (cl.length > 2 && cl.length < 80 && !seenCat[cl]) {
+                  seenCat[cl] = true;
+                  cats.push(cl);
+                }
+              }
+              if (cats.length > 0) {
+                result.categories = cats.join(', ');
+                break;
+              }
+            }
+          }
         }
 
         return result;
       })()
     `).catch(() => ({ gmv: '', itemsSold: '', categories: '', revenueSource: '' }));
 
-    // Fallback categories: hover vào "+2" để lấy danh mục đầy đủ
-    let detailCategories = detailData.categories || '';
-    if (!detailCategories) {
-      // Lấy từ phần "Danh mục" ở profile header
-      const headerCat = await page.evaluate(`
+    // Ưu tiên categories từ API (đầy đủ nhất), fallback DOM
+    let detailCategories = apiCategories || detailData.categories || '';
+
+    // Lấy đầy đủ categories: hover vào nextSibling span chứa "+N" (là text node, không phải element riêng)
+    // Structure: <span>Danh mục</span> <span class="flex"><span>Trang phục nữ &...</span>, +2</span>
+    try {
+      const catSibHandle = await page.evaluateHandle(`
         (function() {
-          var els = document.querySelectorAll('div, span');
-          for (var el of els) {
+          var labels = document.querySelectorAll('span, div');
+          for (var el of labels) {
+            if (el.children.length > 1) continue;
             var t = (el.textContent || '').trim();
-            if (t === 'Danh mục' || t === 'Categories') {
-              var parent = el.closest('div');
-              if (parent) {
-                var fullText = parent.innerText.replace(/^(Danh mục|Categories)\\s*/, '').trim();
-                return fullText.replace(/\\n/g, ', ').replace(/, \\+/g, '');
-              }
-            }
+            if (t !== 'Danh mục' && t !== 'Categories') continue;
+            var sib = el.nextElementSibling;
+            if (sib && /\\+\\s*\\d+/.test(sib.textContent || '')) return sib;
           }
-          return '';
+          return null;
         })()
-      `).catch(() => '');
-      if (headerCat) detailCategories = headerCat;
-    }
-    // Nếu categories vẫn có "+N", hover vào để lấy tooltip
-    if (detailCategories.includes('+')) {
-      const plusEl = await page.$('span:has-text("+")');
-      if (plusEl) {
-        await plusEl.hover();
-        await page.waitForTimeout(1000);
-        const tooltipCat = await page.evaluate(`
+      `);
+      const catSib = catSibHandle.asElement();
+      if (catSib) {
+        // Hover
+        await catSib.hover().catch(() => {});
+        await page.waitForTimeout(1500);
+
+        const readTooltip = `
           (function() {
-            var tips = document.querySelectorAll('[class*="tooltip"], [role="tooltip"], [class*="popover"], [class*="Tooltip"]');
-            for (var tip of tips) {
+            var selectors = [
+              '[class*="tooltip"]', '[role="tooltip"]', '[class*="popover"]',
+              '[class*="Tooltip"]', '[class*="arco-trigger"]', '[class*="popup"]',
+              '[class*="tippy"]', '[data-popper]',
+            ];
+            var all = document.querySelectorAll(selectors.join(','));
+            for (var tip of all) {
+              var style = window.getComputedStyle(tip);
+              if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') continue;
               var t = (tip.textContent || '').trim();
-              if (t.includes('Hạng mục') || t.length > 10) {
-                return t.replace(/^Hạng mục sản phẩm:\\s*/i, '').replace(/^Categories:\\s*/i, '').trim();
+              if (t.length > 5 && (t.includes(',') || t.includes('&'))) {
+                return t
+                  .replace(/^Hạng mục sản phẩm[:\\s]*/i, '')
+                  .replace(/^Product categor(y|ies)[:\\s]*/i, '')
+                  .replace(/^Categories[:\\s]*/i, '')
+                  .trim();
               }
             }
             return '';
           })()
-        `).catch(() => '');
-        if (tooltipCat && tooltipCat.length > detailCategories.length) {
-          detailCategories = tooltipCat;
+        `;
+
+        let fullCat = await page.evaluate(readTooltip);
+
+        // Fallback: click nếu hover không trigger tooltip
+        if (!fullCat) {
+          await catSib.click().catch(() => {});
+          await page.waitForTimeout(1200);
+          fullCat = await page.evaluate(readTooltip);
+        }
+
+        if (fullCat && fullCat.length > (detailCategories || '').length) {
+          detailCategories = fullCat;
+          logger.info('[Scraper] Categories từ tooltip: ' + detailCategories);
         }
       }
+    } catch (e: any) {
+      logger.warn('[Scraper] Hover +N tooltip lỗi: ' + e.message);
     }
+
+    // Loại bỏ trailing "+N" nếu vẫn còn
+    detailCategories = detailCategories.replace(/\s*,?\s*\+\s*\d+\s*$/, '').trim();
+
+    // Dump DOM TẤT CẢ creators để so sánh OK vs MISS
+    const hasMiss = !detailData.gmv || !detailData.itemsSold || !detailData.revenueSource
+      || !detailCategories || /Điểm|Chưa có điểm|Người theo dõi/.test(detailCategories);
+    const prefix = hasMiss ? 'MISS_' : 'OK___';
+    await dumpDomDebug(page, prefix + (username || cid), cid);
+
+    // Map EN → VI cho categories và revenue source
+    const enViMap: Record<string, string> = {
+      'Womenswear & Underwear': 'Trang phục nữ & Đồ lót',
+      'Menswear & Underwear': 'Trang phục nam & Đồ lót',
+      'Sports & Outdoor': 'Thể thao & Ngoài trời',
+      'Beauty & Personal Care': 'Chăm sóc sắc đẹp & Chăm sóc cá nhân',
+      'Food & Beverages': 'Đồ ăn & Đồ uống',
+      'Home Supplies': 'Đồ gia dụng',
+      'Kitchenware': 'Đồ dùng nhà bếp',
+      'Baby & Maternity': 'Trẻ sơ sinh & thai sản',
+      'Fashion Accessories': 'Phụ kiện thời trang',
+      'Phones & Electronics': 'Điện thoại & Đồ điện tử',
+      'Health': 'Sức khỏe',
+      'Kids Fashion': 'Thời trang trẻ em',
+      'Shoes': 'Giày dép',
+      'Bags & Luggage': 'Túi & Hành lý',
+      'Home Appliances': 'Đồ gia dụng điện',
+      'Pet Supplies': 'Đồ dùng thú cưng',
+      'Toys & Hobbies': 'Đồ chơi & Sở thích',
+      'Books, Magazines & Audio': 'Sách, Tạp chí & Âm thanh',
+      'Textiles & Soft Furnishings': 'Dệt & Nội thất mềm',
+      'Furniture': 'Nội thất',
+      'Automotive': 'Ô tô & Xe máy',
+      'product cards': 'Thẻ sản phẩm',
+      'Product Cards': 'Thẻ sản phẩm',
+      'Showcase': 'Trưng bày',
+      'LIVE': 'LIVE',
+      'Video': 'Video',
+      'Other': 'Khác',
+    };
+
+    function mapEnVi(text: string): string {
+      let result = text;
+      for (const [en, vi] of Object.entries(enViMap)) {
+        result = result.split(en).join(vi);
+      }
+      return result;
+    }
+
+    detailCategories = mapEnVi(detailCategories);
+    const mappedRevenue = mapEnVi(detailData.revenueSource || '');
 
     return {
       bio, phone, zalo, whatsapp, email,
@@ -439,7 +820,7 @@ export async function scrapeContactInTab(
       detailGmv: detailData.gmv || '',
       detailCategories,
       detailItemsSold: detailData.itemsSold || '',
-      revenueSource: detailData.revenueSource || '',
+      revenueSource: mappedRevenue,
     };
   } catch {
     return null;

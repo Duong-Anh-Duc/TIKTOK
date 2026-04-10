@@ -3,6 +3,117 @@ import XLSX from 'xlsx';
 import { logger } from '../../../utils/logger';
 
 let currentJobFile = '';
+let currentLogFile = '';
+
+/**
+ * Ghi log chi tiết 1 creator vào file txt — dùng để debug missing fields
+ */
+export function appendCreatorLog(idx: number, total: number, creator: any): void {
+  try {
+    const fs = require('fs');
+    const logsDir = path.resolve(__dirname, '..', '..', '..', '..', 'data');
+    if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
+
+    if (!currentLogFile) {
+      const base = currentJobFile ? currentJobFile.replace('.xlsx', '') : 'scrape-' + Date.now();
+      currentLogFile = base + '.log.txt';
+      const header = '='.repeat(80) + '\n'
+        + 'SCRAPE LOG — ' + new Date().toLocaleString() + '\n'
+        + '='.repeat(80) + '\n\n';
+      fs.writeFileSync(path.resolve(logsDir, currentLogFile), header);
+    }
+
+    // Phát hiện các field bị miss
+    const missing: string[] = [];
+    if (!creator.followers) missing.push('Followers');
+    if (!creator.gmv) missing.push('GMV');
+    if (!creator.categories) missing.push('Categories');
+    if (!creator.items_sold) missing.push('ItemsSold');
+    if (!creator.content_type) missing.push('RevenueSource');
+    if (!creator.email && !creator.phone && !creator.zalo) missing.push('Contact');
+
+    // Phát hiện categories bị junk (lẫn "Điểm", "Chưa có điểm", etc.)
+    const junkPattern = /(Điểm|Chưa có điểm|Người theo dõi|Followers)/i;
+    const hasCategoryJunk = creator.categories && junkPattern.test(creator.categories);
+
+    const status = missing.length === 0 && !hasCategoryJunk ? 'OK' :
+                   hasCategoryJunk ? 'JUNK_CATEGORIES' :
+                   'MISS:' + missing.join(',');
+
+    const lines = [
+      '[' + idx + '/' + total + '] ' + (creator.username || '?') + '  →  ' + status,
+      '  Bio:           ' + (creator.bio || '(empty)'),
+      '  Followers:     ' + (creator.followers || '(MISS)'),
+      '  GMV:           ' + (creator.gmv || '(MISS)'),
+      '  Categories:    ' + (creator.categories || '(MISS)') + (hasCategoryJunk ? '  ⚠️ JUNK' : ''),
+      '  ItemsSold:     ' + (creator.items_sold || '(MISS)'),
+      '  RevenueSource: ' + (creator.content_type || '(MISS)'),
+      '  Phone:         ' + (creator.phone || '(empty)'),
+      '  Zalo:          ' + (creator.zalo || '(empty)'),
+      '  Whatsapp:      ' + (creator.whatsapp || '(empty)'),
+      '  Email:         ' + (creator.email || '(empty)'),
+      '  URL:           ' + (creator.detailLink || ''),
+      '',
+    ];
+
+    fs.appendFileSync(path.resolve(logsDir, currentLogFile), lines.join('\n'));
+  } catch (e: any) {
+    logger.warn('[Scraper] Không ghi được log creator: ' + e.message);
+  }
+}
+
+/**
+ * Ghi summary cuối job
+ */
+export function finalizeCreatorLog(results: any[]): void {
+  try {
+    if (!currentLogFile) return;
+    const fs = require('fs');
+    const logsDir = path.resolve(__dirname, '..', '..', '..', '..', 'data');
+
+    const total = results.length;
+    let missCount = 0, junkCount = 0;
+    const missByField: Record<string, number> = {
+      Followers: 0, GMV: 0, Categories: 0, ItemsSold: 0, RevenueSource: 0, Contact: 0,
+    };
+    const junkPattern = /(Điểm|Chưa có điểm|Người theo dõi|Followers)/i;
+
+    for (const r of results) {
+      let hasMiss = false;
+      if (!r.followers) { missByField.Followers++; hasMiss = true; }
+      if (!r.gmv) { missByField.GMV++; hasMiss = true; }
+      if (!r.categories) { missByField.Categories++; hasMiss = true; }
+      if (!r.items_sold) { missByField.ItemsSold++; hasMiss = true; }
+      if (!r.content_type) { missByField.RevenueSource++; hasMiss = true; }
+      if (!r.email && !r.phone && !r.zalo) { missByField.Contact++; hasMiss = true; }
+      if (hasMiss) missCount++;
+      if (r.categories && junkPattern.test(r.categories)) junkCount++;
+    }
+
+    const summary = [
+      '',
+      '='.repeat(80),
+      'SUMMARY',
+      '='.repeat(80),
+      'Total scraped:        ' + total,
+      'Records with miss:    ' + missCount + ' (' + Math.round(missCount / total * 100) + '%)',
+      'Junk categories:      ' + junkCount + ' (' + Math.round(junkCount / total * 100) + '%)',
+      '',
+      'Miss by field:',
+      '  Followers:     ' + missByField.Followers,
+      '  GMV:           ' + missByField.GMV,
+      '  Categories:    ' + missByField.Categories,
+      '  ItemsSold:     ' + missByField.ItemsSold,
+      '  RevenueSource: ' + missByField.RevenueSource,
+      '  Contact:       ' + missByField.Contact,
+      '',
+    ].join('\n');
+
+    fs.appendFileSync(path.resolve(logsDir, currentLogFile), summary);
+    logger.info('[Scraper] Log file: ' + currentLogFile);
+    currentLogFile = '';
+  } catch {}
+}
 
 export function saveXlsx(results: any[], isFinal = false): string {
   if (results.length === 0) return '';
